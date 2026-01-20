@@ -1,0 +1,23 @@
+{
+  "name": "focused-answer-writing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Focused study app for UPSC exam preparation",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile start",
+    "build:web": "pnpm --filter web build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r clean"
+  },
+  "keywords": [
+    "upsc",
+    "exam",
+    "study",
+    "focus",
+    "answer-writing"
+  ],
+  "author": "",
+  "license": "MIT"
+}

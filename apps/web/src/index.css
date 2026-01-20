@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    font-family: 'Satoshi', system-ui, sans-serif;
+    background-color: #070714;
+    min-height: 100vh;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Clash Display', system-ui, sans-serif;
+  }
+  
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold 
+           rounded-xl shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 
+           transform hover:-translate-y-0.5 transition-all duration-200;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 bg-navy-800 text-white font-semibold rounded-xl border border-navy-700
+           hover:bg-navy-700 hover:border-primary-500/50 transition-all duration-200;
+  }
+  
+  .card {
+    @apply bg-navy-900/50 backdrop-blur-sm border border-navy-800 rounded-2xl p-6;
+  }
+  
+  .input {
+    @apply w-full px-4 py-3 bg-navy-900 border border-navy-700 rounded-xl text-white
+           placeholder-navy-400 focus:outline-none focus:border-primary-500 focus:ring-2 
+           focus:ring-primary-500/20 transition-all duration-200;
+  }
+  
+  .timer-display {
+    @apply font-mono text-7xl md:text-9xl font-bold tracking-tight;
+  }
+  
+  .phase-indicator {
+    @apply inline-flex items-center px-4 py-2 rounded-full text-sm font-medium;
+  }
+  
+  .streak-badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500/20 to-primary-600/20 
+           border border-primary-500/30 rounded-full;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-primary-500 to-primary-600;
+  }
+  
+  .glow-primary {
+    box-shadow: 0 0 40px rgba(233, 116, 34, 0.3);
+  }
+  
+  .glow-success {
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
+  }
+  
+  .glow-warning {
+    box-shadow: 0 0 40px rgba(234, 179, 8, 0.3);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f0e2a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e1b4b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4f46e5;
+}
+
+/* Timer animations */
+@keyframes countdown-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+.countdown-active {
+  animation: countdown-pulse 1s ease-in-out infinite;
+}
+
+/* Fire emoji animation for streaks */
+@keyframes fire-dance {
+  0%, 100% {
+    transform: rotate(-3deg) scale(1);
+  }
+  25% {
+    transform: rotate(3deg) scale(1.1);
+  }
+  50% {
+    transform: rotate(-3deg) scale(1.05);
+  }
+  75% {
+    transform: rotate(3deg) scale(1.1);
+  }
+}
+
+.fire-emoji {
+  display: inline-block;
+  animation: fire-dance 1s ease-in-out infinite;
+}
