@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/focused-answer-writing/backend/internal/cron"
 	"github.com/focused-answer-writing/backend/internal/database"
 	"github.com/focused-answer-writing/backend/internal/handlers"
 	"github.com/focused-answer-writing/backend/internal/middleware"
@@ -30,8 +31,15 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Initialize handlers
-	h := handlers.NewHandler(db)
+	// Ensure next 7 days have 2 questions each (only when using DB for questions, not spreadsheet)
+	if os.Getenv("QUESTIONS_CSV_URL") == "" {
+		go func() {
+			cron.EnsureQuestionsForNextDays(db)
+		}()
+	}
+
+	// Initialize handlers (optional QUESTIONS_CSV_URL = Google Sheet CSV for daily questions)
+	h := handlers.NewHandler(db, os.Getenv("QUESTIONS_CSV_URL"))
 
 	// Setup Gin router
 	if os.Getenv("GIN_MODE") == "release" {
@@ -66,6 +74,11 @@ func main() {
 		v1.GET("/health", func(c *gin.Context) {
 			c.JSON(200, gin.H{"status": "healthy", "service": "focused-answer-writing-api", "version": "v1"})
 		})
+
+		// Public question routes (no login required)
+		v1.GET("/questions/today", h.GetTodayQuestionsPublic)
+		v1.GET("/questions/:id", h.GetQuestion)
+
 		// Auth routes (public)
 		auth := v1.Group("/auth")
 		{
@@ -87,9 +100,7 @@ func main() {
 			protected.POST("/streak/complete", h.CompleteDay)
 			protected.GET("/streak/history", h.GetStreakHistory)
 
-			// Question routes
-			protected.GET("/questions/today", h.GetTodayQuestions)
-			protected.GET("/questions/:id", h.GetQuestion)
+			// Questions/today and questions/:id are registered as public routes above; no duplicate here.
 			protected.POST("/sessions/start", h.StartSession)
 			protected.POST("/sessions/:id/complete", h.CompleteSession)
 			protected.GET("/sessions/history", h.GetSessionHistory)

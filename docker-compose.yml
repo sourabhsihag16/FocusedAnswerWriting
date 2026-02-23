@@ -33,6 +33,9 @@ services:
       - DB_NAME=focused_answer_writing
       - DB_SSLMODE=disable
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - GENERATE_CHATGPT_QUESTIONS=${GENERATE_CHATGPT_QUESTIONS:-false}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
     ports:
       - "8081:8080"
     depends_on:
@@ -40,7 +43,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # React Web App (Production Build with Nginx)
+  # React Web App (production build served by Nginx; /api proxied to backend)
   web:
     build:
       context: ./apps/web

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'react-hot-toast'
 import { useSessionStore, SessionPhase } from '../store/sessionStore'
-import { sessionsAPI, streakAPI } from '../services/api'
+import { setDoneForToday } from '../lib/doneForToday'
 import { 
   BookOpenIcon,
   LightBulbIcon,
@@ -64,38 +64,86 @@ export default function Session() {
     startSession
   } = useSessionStore()
   
-  const [sessionId, setSessionId] = useState<number | null>(null)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [showTabWarning, setShowTabWarning] = useState(false)
+  const [showFocusRedirectModal, setShowFocusRedirectModal] = useState(false)
+  const tabSwitchCountRef = useRef(0)
   const intervalRef = useRef<number | null>(null)
   const warningPlayedRef = useRef(false)
 
-  // Initialize session on mount
+  // Initialize session on mount (no backend call when no login)
   useEffect(() => {
     if (questions.length === 0) {
       navigate('/practice')
       return
     }
-
-    const initSession = async () => {
-      try {
-        const response = await sessionsAPI.startSession(questions[0].id)
-        setSessionId(response.session_id)
-        startSession(response.session_id, questions[0])
-      } catch (error) {
-        console.error('Failed to start session:', error)
-        toast.error('Failed to start session')
-        navigate('/practice')
-      }
-    }
-
-    initSession()
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-    }
+    startSession(0, questions[0])
   }, [])
+
+  // Fullscreen when session is active; Escape key exits fullscreen only (stays on session)
+  useEffect(() => {
+    if (phase === 'idle' || phase === 'completed') return
+    const el = document.documentElement
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.().catch(() => {})
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {})
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {})
+      }
+    }
+  }, [phase])
+
+  // Tab switch detection: warn first; after 3 switches show "stay focused" message and redirect
+  useEffect(() => {
+    if (phase === 'idle' || phase === 'completed') return
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        tabSwitchCountRef.current += 1
+        if (tabSwitchCountRef.current >= 3) {
+          setShowFocusRedirectModal(true)
+          return
+        }
+        setShowTabWarning(true)
+      } else {
+        setShowTabWarning(false)
+      }
+    }
+    const onWindowBlur = () => {
+      setShowTabWarning(true)
+    }
+    const onWindowFocus = () => {
+      setShowTabWarning(false)
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', onWindowBlur)
+    window.addEventListener('focus', onWindowFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', onWindowBlur)
+      window.removeEventListener('focus', onWindowFocus)
+    }
+  }, [phase])
+
+  // After 3 tab switches: redirect to practice after showing message
+  useEffect(() => {
+    if (!showFocusRedirectModal) return
+    const t = setTimeout(() => {
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+      resetSession()
+      navigate('/practice')
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [showFocusRedirectModal, resetSession, navigate])
 
   // Timer logic
   useEffect(() => {
@@ -143,46 +191,24 @@ export default function Session() {
         setPhase('writing')
         break
       case 'writing':
-        // Complete current question
         playCompletionBeep()
         if (currentQuestion) {
           completeQuestion(currentQuestion.id)
-          
-          // Complete session in backend
-          if (sessionId) {
-            try {
-              await sessionsAPI.completeSession(sessionId, totalSessionTime)
-            } catch (e) {
-              console.error('Failed to save session:', e)
-            }
-          }
         }
-        
-        // Check if more questions
         if (currentQuestionIndex < questions.length - 1) {
-          // Start next question
-          try {
-            const response = await sessionsAPI.startSession(questions[currentQuestionIndex + 1].id)
-            setSessionId(response.session_id)
-            nextQuestion()
-          } catch (e) {
-            console.error('Failed to start next session:', e)
-            setPhase('completed')
-          }
+          nextQuestion()
         } else {
-          // All questions completed
           setPhase('completed')
-          try {
-            await streakAPI.completeDay()
-          } catch (e) {
-            console.error('Failed to update streak:', e)
-          }
+          setDoneForToday()
         }
         break
     }
-  }, [phase, currentQuestion, sessionId, totalSessionTime, currentQuestionIndex, questions, setPhase, completeQuestion, nextQuestion])
+  }, [phase, currentQuestion, totalSessionTime, currentQuestionIndex, questions, setPhase, completeQuestion, nextQuestion])
 
   const handleExit = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {})
+    }
     resetSession()
     navigate('/practice')
   }
@@ -261,7 +287,7 @@ export default function Session() {
           </div>
 
           <button onClick={handleExit} className="btn-primary">
-            Back to Dashboard
+            Back to Practice
           </button>
         </motion.div>
       </div>
@@ -270,6 +296,62 @@ export default function Session() {
 
   return (
     <div className="min-h-[80vh] flex flex-col">
+      {/* Tab switch 3x: motivating message then redirect to practice */}
+      <AnimatePresence>
+        {showFocusRedirectModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-navy-950/95 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="card max-w-md mx-4 text-center border-2 border-primary-500/50"
+            >
+              <p className="text-primary-400 font-display text-xl font-semibold mb-2">
+                🌟 You need to be more focused
+              </p>
+              <p className="text-navy-200 mb-2">
+                Great things happen when you give full attention. Take a breath and come back when you&apos;re ready to focus.
+              </p>
+              <p className="text-navy-400 text-sm">
+                Redirecting you to the main page…
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Tab/window blur warning: stay focused (before 3 switches) */}
+      <AnimatePresence>
+        {showTabWarning && !showFocusRedirectModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-navy-950/95 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="card max-w-md mx-4 text-center border-2 border-amber-500/50"
+            >
+              <p className="text-amber-400 font-display text-xl font-semibold mb-2">
+                ⚠️ Stay focused
+              </p>
+              <p className="text-navy-200">
+                Don&apos;t switch tabs or leave the window till the time is running.
+              </p>
+              <p className="text-navy-400 text-sm mt-4">
+                Return to this tab to continue. (Switching away too many times will end the session.)
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Exit confirmation modal */}
       <AnimatePresence>
         {showExitConfirm && (
@@ -350,32 +432,47 @@ export default function Session() {
           {phaseInfo.label} Phase
         </motion.div>
 
-        {/* Timer Display */}
-        <motion.div
-          key={`${phase}-${timeRemaining}`}
-          initial={{ scale: 1.05 }}
-          animate={{ scale: 1 }}
-          className={`timer-display ${phaseInfo.color} ${
-            timeRemaining <= 10 ? 'countdown-active' : ''
-          }`}
-        >
-          {formatTime(timeRemaining)}
-        </motion.div>
-
-        {/* Progress Bar */}
-        <div className="w-full max-w-md mt-8 mb-12">
-          <div className="h-2 bg-navy-800 rounded-full overflow-hidden">
-            <motion.div
-              className={`h-full ${
-                phase === 'reading' ? 'bg-blue-500' :
-                phase === 'thinking' ? 'bg-yellow-500' :
-                phase === 'writing' ? 'bg-green-500' : 'bg-primary-500'
-              }`}
-              initial={{ width: '0%' }}
-              animate={{ width: `${getProgressPercentage()}%` }}
+        {/* Circular clock */}
+        <div className="relative inline-flex items-center justify-center mt-4 mb-8">
+          <svg className="w-48 h-48 md:w-56 md:h-56 -rotate-90" viewBox="0 0 100 100" aria-hidden>
+            <circle
+              className="text-navy-800"
+              stroke="currentColor"
+              strokeWidth="8"
+              fill="transparent"
+              r="42"
+              cx="50"
+              cy="50"
+            />
+            <motion.circle
+              className={
+                phase === 'reading' ? 'text-blue-500' :
+                phase === 'thinking' ? 'text-yellow-500' :
+                phase === 'writing' ? 'text-green-500' : 'text-primary-500'
+              }
+              stroke="currentColor"
+              strokeWidth="8"
+              strokeLinecap="round"
+              fill="transparent"
+              r="42"
+              cx="50"
+              cy="50"
+              strokeDasharray={264}
+              initial={{ strokeDashoffset: 264 }}
+              animate={{ strokeDashoffset: 264 - (getProgressPercentage() / 100) * 264 }}
               transition={{ duration: 0.3 }}
             />
-          </div>
+          </svg>
+          <motion.div
+            key={`${phase}-${timeRemaining}`}
+            initial={{ scale: 1.05 }}
+            animate={{ scale: 1 }}
+            className={`absolute inset-0 flex items-center justify-center font-mono text-3xl md:text-4xl font-bold ${phaseInfo.color} ${
+              timeRemaining <= 10 ? 'countdown-active' : ''
+            }`}
+          >
+            {formatTime(timeRemaining)}
+          </motion.div>
         </div>
 
         {/* Question Card */}

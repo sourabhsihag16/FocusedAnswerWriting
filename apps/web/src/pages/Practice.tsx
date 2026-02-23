@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
-import { questionsAPI, sessionsAPI } from '../services/api'
+import { questionsAPI } from '../services/api'
 import { useSessionStore } from '../store/sessionStore'
+import { isDoneForToday } from '../lib/doneForToday'
 import { 
   PlayIcon, 
   ClockIcon,
@@ -97,7 +98,8 @@ export default function Practice() {
     )
   }
 
-  if (data?.today_completed) {
+  // "Done for today" is tracked in browser localStorage (no login)
+  if (isDoneForToday()) {
     return (
       <div className="max-w-2xl mx-auto text-center py-16">
         <motion.div
@@ -107,22 +109,11 @@ export default function Practice() {
         >
           <div className="text-7xl mb-6">🎉</div>
           <h1 className="font-display text-3xl font-bold text-white mb-4">
-            You're All Done Today!
+            You&apos;re done for the day!
           </h1>
           <p className="text-navy-300 mb-8">
-            Amazing work! You've completed all your questions for today.
-            Come back tomorrow to continue your streak.
+            Come back tomorrow for your next practice session.
           </p>
-          
-          <div className="card inline-flex items-center gap-3 mb-8">
-            <span className="fire-emoji text-3xl">🔥</span>
-            <div className="text-left">
-              <div className="font-mono text-2xl font-bold text-white">
-                {data.current_streak} Day Streak
-              </div>
-              <p className="text-sm text-navy-400">Keep it going!</p>
-            </div>
-          </div>
         </motion.div>
       </div>
     )
@@ -137,10 +128,10 @@ export default function Practice() {
         className="text-center"
       >
         <h1 className="font-display text-3xl font-bold text-white mb-2">
-          Today's Practice Session
+          Start answer writing for today
         </h1>
         <p className="text-navy-300">
-          {data?.total_count} questions to master today • {data?.completed_count} completed
+          {data?.total_count ?? 2} questions to practice today
         </p>
       </motion.div>
 

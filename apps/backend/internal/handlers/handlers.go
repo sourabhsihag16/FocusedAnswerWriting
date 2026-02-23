@@ -9,6 +9,7 @@ import (
 
 	"github.com/focused-answer-writing/backend/internal/middleware"
 	"github.com/focused-answer-writing/backend/internal/models"
+	"github.com/focused-answer-writing/backend/internal/questionsource"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -16,12 +17,13 @@ import (
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	db *sql.DB
+	db             *sql.DB
+	QuestionsCSVURL string // optional: when set, today's questions come from Google Sheet CSV instead of DB
 }
 
-// NewHandler creates a new Handler instance
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+// NewHandler creates a new Handler instance. csvURL can be empty to use DB for questions.
+func NewHandler(db *sql.DB, questionsCSVURL string) *Handler {
+	return &Handler{db: db, QuestionsCSVURL: questionsCSVURL}
 }
 
 // ==================== Auth Handlers ====================
@@ -365,9 +367,86 @@ func (h *Handler) GetStreakHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, history)
 }
 
-// ==================== Question Handlers ====================
+// ==================== Question Handlers (Public - no auth) ====================
 
-// GetTodayQuestions returns questions for today
+// GetTodayQuestionsPublic returns questions for today (no auth required).
+// When QUESTIONS_CSV_URL is set, questions are loaded from the Google Sheet CSV; otherwise from DB.
+func (h *Handler) GetTodayQuestionsPublic(c *gin.Context) {
+	today := time.Now().Format("2006-01-02")
+
+	if h.QuestionsCSVURL != "" {
+		questions, date, err := questionsource.FetchTodayFromCSV(h.QuestionsCSVURL)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load questions from spreadsheet: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, models.TodayQuestionsResponse{
+			Date:             date,
+			Questions:        questions,
+			CompletedCount:   0,
+			TotalCount:       len(questions),
+			TodayCompleted:   false,
+			CurrentStreak:    0,
+		})
+		return
+	}
+
+	rows, err := h.db.Query(
+		`SELECT q.id, q.title, q.content, q.category, q.difficulty, q.subject, 
+		        q.year, q.marks, q.word_limit
+		 FROM daily_questions dq
+		 JOIN questions q ON dq.question_id = q.id
+		 WHERE dq.date = $1 AND q.is_active = TRUE
+		 ORDER BY dq.question_order`,
+		today,
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+	defer rows.Close()
+
+	var questions []models.Question
+	for rows.Next() {
+		var q models.Question
+		if err := rows.Scan(&q.ID, &q.Title, &q.Content, &q.Category, &q.Difficulty,
+			&q.Subject, &q.Year, &q.Marks, &q.WordLimit); err != nil {
+			continue
+		}
+		questions = append(questions, q)
+	}
+
+	// If no questions for today, return 2 from pool (fallback)
+	if len(questions) == 0 {
+		fallbackRows, err := h.db.Query(
+			`SELECT id, title, content, category, difficulty, subject, year, marks, word_limit
+			 FROM questions WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 2`,
+		)
+		if err == nil {
+			defer fallbackRows.Close()
+			for fallbackRows.Next() {
+				var q models.Question
+				if err := fallbackRows.Scan(&q.ID, &q.Title, &q.Content, &q.Category, &q.Difficulty,
+					&q.Subject, &q.Year, &q.Marks, &q.WordLimit); err != nil {
+					continue
+				}
+				questions = append(questions, q)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, models.TodayQuestionsResponse{
+		Date:             today,
+		Questions:        questions,
+		CompletedCount:   0,
+		TotalCount:       len(questions),
+		TodayCompleted:   false, // Frontend uses localStorage for this when no auth
+		CurrentStreak:    0,
+	})
+}
+
+// GetTodayQuestions returns questions for today (protected - with user context)
 func (h *Handler) GetTodayQuestions(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	today := time.Now().Format("2006-01-02")
@@ -428,11 +507,24 @@ func (h *Handler) GetTodayQuestions(c *gin.Context) {
 	})
 }
 
-// GetQuestion returns a specific question
+// GetQuestion returns a specific question. When QUESTIONS_CSV_URL is set, id 1 and 2 are today's questions from the spreadsheet.
 func (h *Handler) GetQuestion(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid question ID"})
+		return
+	}
+
+	if h.QuestionsCSVURL != "" {
+		q, err := questionsource.GetQuestionByID(h.QuestionsCSVURL, id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Question not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"question":       q,
+			"session_config": models.DefaultSessionConfig(),
+		})
 		return
 	}
 

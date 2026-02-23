@@ -29,11 +29,8 @@ export default function Landing() {
               <span className="font-display font-bold text-xl text-white">FocusedAnswer</span>
             </div>
             <div className="flex items-center gap-4">
-              <Link to="/login" className="text-navy-200 hover:text-white transition-colors">
-                Login
-              </Link>
-              <Link to="/register" className="btn-primary">
-                Get Started
+              <Link to="/practice" className="btn-primary">
+                Start Practice
               </Link>
             </div>
           </div>
@@ -79,11 +76,8 @@ export default function Landing() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
             >
-              <Link to="/register" className="btn-primary text-lg px-8 py-4">
-                Start Free Today
-              </Link>
-              <Link to="/login" className="btn-secondary text-lg px-8 py-4">
-                Already have an account?
+              <Link to="/practice" className="btn-primary text-lg px-8 py-4">
+                Start Answer Writing for Today
               </Link>
             </motion.div>
           </div>
@@ -243,7 +237,7 @@ export default function Landing() {
             <p className="text-xl text-navy-300 mb-8">
               Join thousands of UPSC aspirants who are mastering answer writing with consistency.
             </p>
-            <Link to="/register" className="btn-primary text-lg px-10 py-4">
+            <Link to="/practice" className="btn-primary text-lg px-10 py-4">
               Start Your Journey Today
             </Link>
           </motion.div>

@@ -225,14 +225,14 @@ func seedQuestions(db *sql.DB) error {
 		}
 	}
 
-	// Assign questions for today
+	// Assign 2 questions for today (UPSC: 2 questions per day)
 	_, err = db.Exec(`
 		INSERT INTO daily_questions (question_id, date, question_order)
-		SELECT id, CURRENT_DATE, ROW_NUMBER() OVER (ORDER BY id)
+		SELECT id, CURRENT_DATE, ROW_NUMBER() OVER (ORDER BY id)::integer
 		FROM questions
 		WHERE is_active = TRUE
-		LIMIT 5
-		ON CONFLICT DO NOTHING
+		LIMIT 2
+		ON CONFLICT (date, question_order) DO NOTHING
 	`)
 
 	log.Println("✅ Sample questions seeded successfully")
